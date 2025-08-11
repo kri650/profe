@@ -11,6 +11,7 @@
       --muted: #9aa6b2;
       --accent: #2dd4bf;
       --accent-2: #60a5fa;
+      --magic: #f472b6; 
       --card: rgba(255,255,255,0.02);
       --sidebar-width: 320px;
       --gap: 18px;
@@ -19,12 +20,13 @@
 
     /* Reset & base */
     *{box-sizing:border-box}
-    html,body{height:100%; margin:0; font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
+    html,body{height:100%; margin:0; font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; overflow:hidden; /* Hide scrollbars from particles */}
     body{
       background: linear-gradient(180deg, rgba(7,10,15,1) 0%, rgba(11,18,30,1) 100%);
       color:var(--text);
       -webkit-font-smoothing:antialiased;
       -moz-osx-font-smoothing:grayscale;
+      position: relative; /* For particle positioning */
     }
 
     /* Page split: calculator area + sidebar */
@@ -34,6 +36,8 @@
       gap:var(--gap);
       align-items:stretch;
       padding:28px;
+      position: relative;
+      z-index: 2;
     }
 
     /* Left: big calculator (flexible) */
@@ -90,9 +94,26 @@
       gap:6px;
       box-shadow: inset 0 -6px 30px rgba(0,0,0,0.35);
       border: 1px solid rgba(255,255,255,0.03);
+      position:relative;
+      overflow:hidden;
+    }
+    .display.glowing::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -150%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.08) 50%, transparent 70%);
+        animation: shimmer 1.2s forwards;
+    }
+    @keyframes shimmer {
+        to { left: 150%; }
     }
     .display .previous { color:var(--muted); font-size:0.95rem; opacity:0.85; letter-spacing:0.2px; }
     .display .current { font-size:3.6rem; font-weight:600; color:var(--text); line-height:1; word-break:break-all; }
+    /* Adjust font size for quotes */
+    .display .current.quote { font-size: 1.5rem; font-weight: 500; text-align:right; letter-spacing: 0.5px; line-height: 1.4; }
 
     /* Buttons grid: large tiles */
     .pad {
@@ -119,6 +140,7 @@
       box-shadow: 0 6px 18px rgba(2,6,23,0.45);
       transition: transform 120ms ease, box-shadow 120ms ease, background 140ms ease;
       cursor:pointer;
+      position: relative; /* For particle anchor */
     }
     .btn:active{ transform: translateY(2px) scale(0.997); }
     .btn:focus{ outline: 2px solid rgba(45,212,191,0.16); outline-offset:3px; }
@@ -128,6 +150,7 @@
     .btn-eq{ background: linear-gradient(180deg, var(--accent), var(--accent-2)); color:#021016; font-size:1.25rem; box-shadow: 0 10px 30px rgba(45,212,191,0.12); }
     .btn-clear{ background: linear-gradient(180deg, rgba(255,85,85,0.08), rgba(255,85,85,0.02)); color:#ffb3b3; }
     .btn-back{ background: linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0.01)); color:var(--muted); }
+    .btn-magic { background: linear-gradient(180deg, rgba(244, 114, 182, 0.1), rgba(244, 114, 182, 0.03)); color:var(--magic); box-shadow: 0 6px 18px rgba(244, 114, 182, 0.05); }
 
     .span-2 { grid-column: span 2; }
     .span-3 { grid-column: span 3; }
@@ -182,18 +205,36 @@
       .sidebar{ width:100%; min-width:0; max-width:none; height:auto; border-left:none; border-top:1px solid rgba(255,255,255,0.03); }
       .calculator{ height:auto; padding:18px; gap:16px; }
       .display .current{ font-size:2.6rem; }
+      .display .current.quote { font-size: 1.2rem; }
       .pad { grid-template-columns: repeat(4,1fr); grid-auto-rows:72px; }
     }
 
     /* small helper styles */
     .tiny { font-size:0.86rem; color:var(--muted); }
     .muted { color:var(--muted); }
+    
+    .header-controls { display:flex; align-items:center; gap:16px; }
+    .mute-btn { background:none; border:none; cursor:pointer; font-size:1.2rem; color:var(--muted); opacity:0.6; transition: all .2s ease; }
+    .mute-btn:hover { opacity:1; color: var(--accent); }
+
+    .sparkle {
+        position: absolute;
+        background: radial-gradient(circle, var(--accent) 0%, var(--magic) 100%);
+        border-radius: 50%;
+        pointer-events: none;
+        animation: fly-out 800ms forwards ease-out;
+        z-index: 10;
+    }
+
+    @keyframes fly-out {
+        0% { transform: translate(0, 0) scale(1); opacity: 1; }
+        100% { transform: translate(var(--tx, 0), var(--ty, 0)) scale(0); opacity: 0; }
+    }
 
   </style>
 </head>
 <body>
   <div class="root">
-    <!-- Left: Calculator -->
     <div class="calc-area">
       <section class="calculator" aria-label="Professional Calculator">
         <div class="calc-header" role="banner">
@@ -204,7 +245,10 @@
               <div class="subtitle">Formal • Clean • Precise</div>
             </div>
           </div>
-          <div class="tiny muted" id="status">Ready</div>
+          <div class="header-controls">
+            <div class="tiny muted" id="status">Ready</div>
+            <button class="mute-btn" id="mute-btn" title="Toggle Sound">🔈</button>
+          </div>
         </div>
 
         <div class="display" role="status" aria-live="polite">
@@ -213,39 +257,35 @@
         </div>
 
         <div class="pad" role="group" aria-label="Calculator Keys">
-          <!-- Row 1 -->
-          <button class="btn btn-clear span-2" data-action="clear">C</button>
+          <button class="btn btn-clear" data-action="clear">C</button>
           <button class="btn btn-back" data-action="back">⌫</button>
+          <button class="btn btn-magic" data-action="magic" title="Inspiration Quote">💡</button>
           <button class="btn btn-op" data-action="op">÷</button>
           <button class="btn btn-op" data-action="op">×</button>
 
-          <!-- Row 2 -->
-          <button class="btn" data-action="num">−</button>
+          <button class="btn" data-action="num">7</button>
           <button class="btn" data-action="num">8</button>
           <button class="btn" data-action="num">9</button>
-          <button class="btn btn-op" data-action="op">7</button>
+          <button class="btn btn-op" data-action="op">−</button>
+          <button class="btn btn-op" data-action="op">+</button>
+          
           <button class="btn" data-action="num">4</button>
           <button class="btn" data-action="num">5</button>
-
-          <!-- Row 3 -->
           <button class="btn" data-action="num">6</button>
+          <button class="btn btn-eq span-2" data-action="eq">=</button>
+
           <button class="btn" data-action="num">1</button>
           <button class="btn" data-action="num">2</button>
           <button class="btn" data-action="num">3</button>
-          <button class="btn btn-eq span-2" data-action="eq">=</button>
-
-          <!-- Row 4 -->
           <button class="btn span-2" data-action="num">0</button>
           <button class="btn" data-action="num">.</button>
-          <button class="btn btn-op" data-action="op">+</button>
         </div>
       </section>
     </div>
 
-    <!-- Right: History Sidebar -->
     <aside class="sidebar" aria-label="History Sidebar">
-      <h3>Operation History</h3>
-      <div class="hint">Recent calculations are shown here — persisted locally. Entries automatically fade after 5 minutes.</div>
+      <h3>Calculation History</h3>
+      <div class="hint">Recent calculations are persisted locally. Entries automatically clear after 5 minutes.</div>
       <ul class="history-list" id="history-list" aria-live="polite"></ul>
     </aside>
   </div>
@@ -254,18 +294,72 @@
     /* ======= State ======= */
     const prevDisplay = document.getElementById('prev-display');
     const currDisplay = document.getElementById('curr-display');
+    const displayEl = document.querySelector('.display');
     const status = document.getElementById('status');
     const historyListEl = document.getElementById('history-list');
     const buttons = document.querySelectorAll('.btn');
+    const muteBtn = document.getElementById('mute-btn');
 
     let currentOperand = '';
     let previousOperand = '';
     let operation = null;
-    let history = JSON.parse(localStorage.getItem('pcalc_history') || '[]'); // {expr, result, timestamp}
+    let history = JSON.parse(localStorage.getItem('pcalc_history') || '[]');
+    let isMuted = localStorage.getItem('pcalc_muted') === 'true';
 
-    const HISTORY_TTL = 5 * 60 * 1000; // 5 minutes in ms
-    const CHECK_INTERVAL = 10 * 1000; // check stale every 10s
+    const HISTORY_TTL = 5 * 60 * 1000;
+    const CHECK_INTERVAL = 10 * 1000;
 
+    /* ======= Auditory Feedback Engine ======= */
+    const sounds = {
+        click: new Audio("data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU0AAAAAAAAAT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PTw=="),
+        operator: new Audio("data:audio/wav;base64,UklGRigBAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABgAZGF0YQQBAAD//w=="),
+        equals: new Audio("data:audio/wav;base64,UklGRjABAABXQVZFZm10IBAAAAABAAIARKwAABCxAgAEABgAZGF0YVwBAAD//v/6//r/+f/6/vr/+v/9//7//P/9/vr/+v/6//r/+f/5//j/+P/4//f/9//3//f/9v/2//b/9v/2//b/9v/3//f/9//4//j/+f/6/vr/+v/8//3//f/8//v/+v/6//n/+f/4//f/9//2//b/9f/1//X/9f/1//X/9v/2//f/9//4//n/+f/6//r/+//8//z//P/8//v/+//6//n/+f/4//f/9//2//b/9f/1//T/9P/0//T/9f/1//b/9v/3//f/9//4//j/+f/5/vo="),
+        clear: new Audio("data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAiFECACJWAAACABgAZGF0YRIAAAAAAAD//w=="),
+        backspace: new Audio("data:audio/wav;base64,UklGRkIAAABXQVZFZm10IBAAAAABAAEAiFECACJWAAACABgAZGF0YRoAAAAA/v8A/P8A/v8BAP4A/gAA//8A/wAAAgADAAEAAgACAAAA/v8A/g=="),
+        error: new Audio("data:audio/wav;base64,UklGRlIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YUgAAAD8/vz+/P78/vz+/P78/vz+/P78/vz+/P78/vz+/P78/vz+/P78/vz+/P78/vz+/P78/vz+/P78/vz+/P78/vz+/P78/vz+/P78/vwe/B4="),
+        magic: new Audio("data:audio/wav;base64,UklGRkYBAABXQVZFZm10IBAAAAABAAIARKwAABCxAgAEABgAZGF0YUIBAABAAEAAPz8/AD8APgA/AD8APwA/AD8APgA+AD4APgA+AD4APgA+AD0APQA9AD0APQA9AD0APgA+AD4APwA/AD8APwA/AD8APwA/AD4APgA9AD0APQA8ADwAOwA7ADsAOwA7ADwAPAA9AD0APQA+AD4APgA/AD8APwA/AD8APwA/AD4APgA+AD0APQA9AD0APAA8ADwAOwA7ADsAOwA8ADwAPAA9AD0APQA+AD4APwA/AD8="),
+    };
+    function playSound(name) {
+        if (isMuted) return;
+        const sound = sounds[name];
+        if (sound) {
+            sound.currentTime = 0;
+            sound.play().catch(e => {});
+        }
+    }
+    muteBtn.addEventListener('click', () => {
+        isMuted = !isMuted;
+        muteBtn.textContent = isMuted ? '🔇' : '🔈';
+        localStorage.setItem('pcalc_muted', isMuted);
+    });
+    muteBtn.textContent = isMuted ? '🔇' : '🔈';
+
+    /* ======= Enhanced Visual Feedback ======= */
+    function createSparkles(e) {
+        const btn = e.currentTarget;
+        for (let i = 0; i < 15; i++) {
+            const sparkle = document.createElement('div');
+            sparkle.className = 'sparkle';
+            const size = Math.random() * 5 + 2;
+            sparkle.style.width = `${size}px`;
+            sparkle.style.height = `${size}px`;
+            const angle = Math.random() * 360;
+            const radius = Math.random() * 40 + 30;
+            const x = Math.cos(angle * Math.PI / 180) * radius;
+            const y = Math.sin(angle * Math.PI / 180) * radius;
+            sparkle.style.setProperty('--tx', `${x}px`);
+            sparkle.style.setProperty('--ty', `${y}px`);
+            sparkle.style.left = `${btn.offsetWidth / 2}px`;
+            sparkle.style.top = `${btn.offsetHeight / 2}px`;
+            btn.appendChild(sparkle);
+            setTimeout(() => sparkle.remove(), 800);
+        }
+    }
+    function triggerDisplayGlow(){
+        displayEl.classList.add('glowing');
+        setTimeout(() => displayEl.classList.remove('glowing'), 1200);
+    }
+    
     /* ======= Helpers ======= */
     function formatTimeAgo(ts){
       const diff = Date.now() - ts;
@@ -274,23 +368,19 @@
       if (diff < 24*60*60_1000) return Math.floor(diff/(60*60*1000)) + 'h ago';
       return new Date(ts).toLocaleString();
     }
-
     function saveHistory(){
       localStorage.setItem('pcalc_history', JSON.stringify(history));
     }
-
     function pushHistory(expr, result){
       const entry = { expr, result: String(result), timestamp: Date.now() };
       history.unshift(entry);
-      // limit to 50 entries (keeps storage small)
       if (history.length > 50) history.length = 50;
       saveHistory();
       renderHistory();
     }
-
     function renderHistory(){
       historyListEl.innerHTML = '';
-      history.forEach((h, idx) => {
+      history.forEach((h) => {
         const li = document.createElement('li');
         li.className = 'history-item';
         li.dataset.ts = h.timestamp;
@@ -299,29 +389,27 @@
         historyListEl.appendChild(li);
       });
     }
-
     function escapeHtml(str){
       return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
     }
-
+    
     /* ======= Display ======= */
     function updateDisplay(){
+      currDisplay.classList.remove('quote');
       currDisplay.textContent = currentOperand || '0';
       prevDisplay.textContent = previousOperand && operation ? `${previousOperand} ${operation}` : '';
     }
 
-    /* ======= Numeric & Operation Logic ======= */
+    /* ======= Logic ======= */
     function appendNumber(char){
-      // prevent multiple leading zeros
       if (char === '0' && currentOperand === '0') return;
       if (char === '.' && currentOperand.includes('.')) return;
       if (char === '.' && currentOperand === '') currentOperand = '0';
+      if(currentOperand.length > 15) return;
       currentOperand += char;
       updateDisplay();
     }
-
     function chooseOperation(opSymbol){
-      // if user pressed op after result (with currentOperand containing result), we proceed
       if (currentOperand === '' && previousOperand === '') return;
       if (previousOperand !== '' && currentOperand !== ''){
         compute();
@@ -333,7 +421,6 @@
       operation = opSymbol;
       updateDisplay();
     }
-
     function compute(){
       const prev = parseFloat(previousOperand);
       const curr = parseFloat(currentOperand);
@@ -344,13 +431,14 @@
         case '−': res = prev - curr; break;
         case '×': res = prev * curr; break;
         case '÷':
-          if (curr === 0){
-            res = 'Error';
-          } else {
-            res = prev / curr;
-          }
+          if (curr === 0){ res = 'Error'; playSound('error'); } 
+          else { res = prev / curr; }
           break;
         default: return;
+      }
+      if(res !== 'Error') {
+         playSound('equals');
+         triggerDisplayGlow();
       }
       pushHistory(`${prev} ${operation} ${curr}`, res);
       currentOperand = String(res);
@@ -358,8 +446,8 @@
       operation = null;
       updateDisplay();
     }
-
     function clearAll(){
+      playSound('clear');
       currentOperand = '';
       previousOperand = '';
       operation = null;
@@ -370,164 +458,122 @@
         updateDisplay();
       }, 900);
     }
-
     function backspace(){
       if (currentOperand.length > 0) {
+        playSound('backspace');
         currentOperand = currentOperand.slice(0, -1);
         updateDisplay();
       }
     }
+    function showInspiration(){
+        playSound('magic');
+        triggerDisplayGlow();
+        const quotes = [
+            `"Measure what is measurable..."<br><small>- Galileo Galilei</small>`,
+            `"The best way to predict the future is to invent it."<br><small>- Alan Kay</small>`,
+            `"Success is the sum of small efforts."<br><small>- Robert Collier</small>`,
+            `"An investment in knowledge pays the best interest."<br><small>- Benjamin Franklin</small>`,
+            `"Random Seed: ${Math.floor(Math.random() * 9999)}"`
+        ];
+        const quote = quotes[Math.floor(Math.random() * quotes.length)];
+        currentOperand = '';
+        previousOperand = '';
+        operation = null;
+        currDisplay.classList.add('quote');
+        currDisplay.innerHTML = quote;
+        status.textContent = 'Quote loaded!';
+        setTimeout(() => status.textContent = 'Ready', 1500);
+    }
 
     /* ======= Button & Keyboard Handling ======= */
-    function handleButtonPress(btn){
+    function handleButtonPress(btn, e){
       const action = btn.dataset.action;
       const text = btn.textContent.trim();
-
-      // visual feedback
-      btn.classList.add('active');
-      setTimeout(()=> btn.classList.remove('active'), 130);
-
-      if (action === 'num'){
-        appendNumber(text);
-        return;
-      }
-      if (action === 'op'){
-        // normalize minus sign: ASCII minus vs unicode
-        const normalized = text === '−' ? '−' : text; // already correct
-        chooseOperation(normalized);
-        return;
-      }
-      if (action === 'eq'){
-        compute();
-        return;
-      }
-      if (action === 'clear'){
-        clearAll();
-        return;
-      }
-      if (action === 'back'){
-        backspace();
-        return;
-      }
+      
+      if(e) createSparkles(e);
+      
+      if (action === 'num'){ playSound('click'); appendNumber(text); }
+      else if (action === 'op'){ playSound('operator'); chooseOperation(text); }
+      else if (action === 'eq'){ compute(); }
+      else if (action === 'clear'){ clearAll(); }
+      else if (action === 'back'){ backspace(); }
+      else if(action === 'magic'){ showInspiration(); }
     }
 
     buttons.forEach(btn => {
       btn.addEventListener('click', (e) => {
-        handleButtonPress(btn);
+        handleButtonPress(btn, e);
       });
     });
 
-    // Keyboard map: map keys to actions
     document.addEventListener('keydown', (e) => {
       const key = e.key;
-      // digits
-      if (/^[0-9]$/.test(key)){
-        appendNumber(key);
-        return;
-      }
-      if (key === '.' || key === ',') { // allow comma too
-        appendNumber('.');
-        return;
-      }
-      if (key === 'Enter' || key === '='){
+      let targetBtn = null;
+      
+      if (/^[0-9.]$/.test(key)){ targetBtn = Array.from(buttons).find(b => b.textContent.trim() === key && b.dataset.action === 'num'); } 
+      else if (key === 'Enter' || key === '=') { e.preventDefault(); targetBtn = document.querySelector('[data-action="eq"]'); } 
+      else if (key === 'Backspace') { e.preventDefault(); targetBtn = document.querySelector('[data-action="back"]'); } 
+      else if (key === 'Escape') { targetBtn = document.querySelector('[data-action="clear"]'); } 
+      else if (['+', '-', '*', '/'].includes(key)) {
         e.preventDefault();
-        compute();
-        return;
+        const opMap = { '+':'+', '-':'−', '*':'×', '/':'÷' };
+        targetBtn = Array.from(buttons).find(b => b.textContent.trim() === opMap[key]);
       }
-      if (key === 'Backspace'){
-        e.preventDefault();
-        backspace();
-        return;
+      
+      if(targetBtn) {
+          targetBtn.focus();
+          handleButtonPress(targetBtn, null);
       }
-      if (key === 'Escape'){
-        clearAll();
-        return;
-      }
-      // operators: map * / - +
-      if (['+', '-', '*', '/'].includes(key)){
-        e.preventDefault();
-        const map = { '+':'+', '-':'−', '*':'×', '/':'÷' };
-        chooseOperation(map[key]);
-        return;
-      }
-      // ignore other keys
     });
 
     /* ======= History TTL and fade-out ======= */
     function pruneHistoryImmediate(){
       const now = Date.now();
       let changed = false;
-      // remove entries older than TTL
       history = history.filter(h => {
         if (now - h.timestamp < HISTORY_TTL) return true;
-        changed = true;
-        return false;
+        changed = true; return false;
       });
-      if (changed) {
-        saveHistory();
-        renderHistory();
-      }
+      if (changed) { saveHistory(); renderHistory(); }
     }
-
-    // Regular check: instead of instant remove, we animate fade then remove
     function checkHistoryFade(){
       const now = Date.now();
       const items = Array.from(historyListEl.children);
       items.forEach(li => {
         const ts = Number(li.dataset.ts);
         if (isNaN(ts)) return;
-        const age = now - ts;
-        if (age >= HISTORY_TTL){
-          // find index in array and remove with animation
+        if (now - ts >= HISTORY_TTL){
           li.classList.add('fading');
-          // after animation, remove from DOM and from history array
           setTimeout(() => {
             const idx = history.findIndex(h => h.timestamp === ts);
-            if (idx !== -1){
-              history.splice(idx,1);
-              saveHistory();
-            }
-            // ensure DOM reconciles
+            if (idx !== -1){ history.splice(idx,1); saveHistory(); }
             if (li.parentElement) li.parentElement.removeChild(li);
-          }, 900); // matches CSS transition ~0.9s
+          }, 900);
         } else {
-          // update "time ago"
           const timeEl = li.querySelector('.time');
           if (timeEl) timeEl.textContent = formatTimeAgo(ts);
         }
       });
     }
 
-    // run checks on load
+    setInterval(() => {
+      renderHistory(); 
+      checkHistoryFade();
+    }, CHECK_INTERVAL);
+    
+    /* ======= Init UI ======= */
     pruneHistoryImmediate();
     renderHistory();
     checkHistoryFade();
-
-    // run periodic checks
-    setInterval(() => {
-      // first update time labels
-      renderHistory(); // re-render times (keeps it simple)
-      checkHistoryFade();
-    }, CHECK_INTERVAL);
-
-    /* ======= Init UI ======= */
     updateDisplay();
-
-    /* ======= Accessibility: focus on first number when load (optional) ======= */
-    // find first numeric button and focus for keyboard users
-    (function focusFirstNum(){
-      const firstNum = document.querySelector('[data-action="num"]');
-      if (firstNum) firstNum.tabIndex = 0;
-    })();
-
-    /* ======= Extra: clicking history item reapplies it ======= */
+    
     historyListEl.addEventListener('click', (e) => {
       const li = e.target.closest('.history-item');
       if (!li) return;
+      playSound('click');
       const ts = Number(li.dataset.ts);
       const item = history.find(h => h.timestamp === ts);
       if (!item) return;
-      // reapply the result to the current operand
       currentOperand = String(item.result);
       previousOperand = '';
       operation = null;

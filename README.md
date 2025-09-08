@@ -28,7 +28,7 @@
 
 ## Demo
 
-Check out the live demo [here](https://yourusername.github.io/professional-calculator)  
+Check out the live demo [here](https://kri650.github.io/profe/)  
 *(Replace the link with your actual GitHub Pages URL)*
 
 ---
